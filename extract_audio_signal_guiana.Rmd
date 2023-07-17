@@ -1,0 +1,425 @@
+---
+title: "Processing of the audio files issued from the MNHM experiment at CNRS Nouragues Research Station"
+author: "Gwenaël GUILLAUME"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  bookdown::html_document2:
+    fig_caption: yes
+    # lib_dir: "/home/gguillaume/Documents/Encadrement/Thèses/2020-These_TLM_Propa_foret/Mesures_forets/lib"
+    toc: true
+  bookdown::pdf_document2:
+    # template: "template.tex"
+    keep_tex: true
+    fig_caption: yes
+    toccolor: blue
+    latex_engine: xelatex
+bibliography: biblio.bib
+# csl: plos-one.csl
+header-includes:
+  - \usepackage[french]{babel}
+  - \usepackage{fancyhdr}
+  - \usepackage[breaklinks]{hyperref}
+  - \usepackage{graphicx}
+---
+
+```{r clear-workspace, include=FALSE, echo=FALSE}
+rm(list = ls())
+```
+
+```{r warn-mess-options, include=FALSE, echo=FALSE}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE) 
+```
+
+```{r load-libs, include=FALSE, echo=FALSE}
+library(knitr)
+library(kableExtra)
+library(stringr)
+library(seewave)
+library(tuneR)
+library(signal)
+library(plotly)
+library(htmlwidgets)
+library(hrbrthemes)
+library(webshot2)
+library(ggplot2)
+library(ggtext)
+library(varbvs)
+library(gridExtra)
+library(ambient)
+library(oce)
+library(onlineforecast)
+library(lubridate)
+library(purrr)
+library(embedr)
+# library(RcppCNPy)
+library(reticulate)
+reticulate::use_python("/usr/bin/python3.8", required = TRUE)
+```
+
+```{r set-wd, include=FALSE, echo=FALSE}
+# knitr::opts_knit$set(root.dir = dirname(rstudioapi::getActiveDocumentContext()$path))
+source("./toolbox/toolbox_propagation_wav_extraction.R", chdir = TRUE)
+source("./toolbox/toolbox_plots.R", chdir = TRUE)
+source("./toolbox/toolbox_extractions.R", chdir = TRUE)
+```
+
+```{r set-wav-player, include=FALSE, echo=FALSE}
+wav_player <- try(system(command = "which vlc", intern = TRUE))
+```
+
+```{r create-folders, include=FALSE, echo=FALSE}
+dir.create("./output", showWarnings = FALSE)
+dir.create("./output/wav_samples", showWarnings = FALSE)
+dir.create("./output/wav_samples/background_noise", showWarnings = FALSE)
+dir.create("./output/wav_samples/white_noise", showWarnings = FALSE)
+dir.create("./output/wav_samples/chirp", showWarnings = FALSE)
+dir.create("./output/df_samples", showWarnings = FALSE)
+dir.create("./output/df_samples/background_noise", showWarnings = FALSE)
+dir.create("./output/df_samples/white_noise", showWarnings = FALSE)
+dir.create("./output/df_samples/chirp", showWarnings = FALSE)
+```
+
+# Description of the experiment
+
+```{r parameters, include=FALSE, echo=FALSE}
+# Svantek-parameters
+S = -29.12       # Sensitivity microphone SVANTEK 7052 : 35 mV/Pa [dBV (20*log10(35e-3/1))]
+G = 12           # Amplification gain : Preamplifier SVANTEK SV 12L IPE (preamplifier gain = 12dB)
+VADC = 2         # Analog to digital conversion (Vpp [peak to peak])
+P_REF = 20e-6    # Reference pressure (in the air : 20µPa)
+# Audio-file-parameters
+wav_filename = "./data/guiana/SVANTEK/AUDIO29_data/AUDIO29.WAV"       # Audio file path
+savefile = "./data/psd/guiana_svantek_wn"                             # Save file path
+wavSM4 = readWave(wav_filename, units = 'seconds')  # Read the wave file
+# wavSM4 = readWave(wav_filename, from = 0, to = 0.001, units = 'seconds')  # Read a portion of the wave file
+fs_rec = wavSM4@samp.rate
+bit = wavSM4@bit
+wav_dur <- trunc(lubridate::seconds_to_period(length(wavSM4@left)/fs_rec))  # trunc to remove milliseconds
+wav_dur_str <- reduce2(c('H', 'M', 'S'), c('h', 'min', "s"),  .init = wav_dur, str_replace)
+noise_types <- c("background.noise", "white.noise", "chirp")
+# Timeline parameters
+silbetween_dur <- 0.500 
+am_dur <- 0.500
+silbetween22s_dur <- 22
+ch_dur <- 1.1
+silbetweenChirp_dur <- 4.4 
+wn_dur <- 22
+snkHz_dur <- 0.100
+silbetweenSnkHz_dur <- 0.4
+snkHz_comp_dur <- 44*(snkHz_dur + silbetweenSnkHz_dur)
+snkHz_comp_dur_without_sil <- 44*(snkHz_dur)
+one_dur <- am_dur+silbetween22s_dur+4*(ch_dur+silbetweenChirp_dur)+wn_dur+silbetween_dur+ snkHz_comp_dur + silbetween_dur + am_dur
+start_ref = am_dur
+start_ch =  start_ref+ silbetween22s_dur 
+start_wn =  start_ch + 4*(ch_dur+silbetweenChirp_dur) 
+start_pt =  start_wn + wn_dur + silbetween_dur
+total_dur <- one_dur*3 + 2*silbetween_dur # 4min 30s
+# Beginning and end time for background noise
+t.beg.bn <- start_ref*2
+t.end.bn <- t.beg.bn + silbetween22s_dur-start_ref
+# Beginning and end time for white noise
+t.beg.wn <- start_wn
+t.end.wn <- t.beg.wn + wn_dur
+# Beginning and end time for chirp
+t.beg.ch <- start_ch
+t.end.ch <- t.beg.ch + ch_dur
+# Start time (s) for each sequence according to the distance from the source
+start_50cm = 1*60*60 + 15*60 + 27.270
+start_1m = 1*60*60 + 9*60 + 39.020
+start_10 = 1*60*60 + 3*60 + 36.503
+start_20 = 57*60 + 42.872
+start_30 = 51*60 + 59.145
+start_40 = 46*60 + 34.254 
+start_50 = 38*60 + 59.194
+start_60 = 33*60 + 39.762 
+start_70 = 28*60 +  2.102
+start_80 = 22*60 + 25.595
+start_90 =  7*60 + 26.586
+start_100 = 1*60 + 47.557
+# Distances for each measurement
+am_distances <- c(0.5, 1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100) # in meters
+# Timeline for all measurements at distances from 50cm to 100m
+am_timeline <- c(start_50cm, start_1m, start_10, start_20, start_30, start_40, start_50, start_60, start_70, start_80, start_90, start_100)
+# Distance from the source up to which the measurements are processed (signal to noise ratio too low afterwards)
+max_dist <- 40
+timeline <- am_timeline[1:which(am_distances==max_dist)]
+distances <- am_distances[1:which(am_distances==max_dist)]
+# Data frame with distances and timeline for the different tests
+df_timeline = data.frame(distances, timeline, timeline+one_dur+silbetween_dur, timeline+2*(one_dur+silbetween_dur))
+colnames(df_timeline) <- c("distance", "timeline1", "timeline2", "timeline3")
+nb_seqs <- ncol(df_timeline) - 1
+```
+
+The experiment consisted of continuously recording in a mono audio file for `r wav_dur_str` different sequences corresponding to source-receiver distances starting at `r paste(am_distances[1], "m", sep = " ")` up to `r paste(am_distances[length(am_distances)], "m", sep = " ")` with, at each source-receiver distance, a series of successive measurements organized as follows:
+
+* first, a ``beep'' marks the beginning of the series of measurements,
+* then background noise is recorded for `r paste(wn_dur, "s", sep = " ")` and repeated `r nb_seqs` times,
+* this is followed by the emission of a chirp by the sound source during `r paste(silbetweenChirp_dur, "s", sep = " ")` `r nb_seqs` times,
+* then that of a white noise lasting `r paste(silbetween22s_dur, "s", sep = " ")` also `r nb_seqs` times,
+* immediately followed by a sliding sine lasting `r paste(snkHz_comp_dur, "s", sep = " ")`.
+
+Table \@ref(tab:table-exp) gives the start instants of the `r nb_seqs` measurement series at the different distances for which the measurements can be used according to @Haupert_et_al_2023 (*i.e.* up to `r paste(df_timeline$distance[nrow(df_timeline)], "m", sep = " ")` from the source).
+
+The mono audio file `r tail(str_split_1(string = wav_filename, pattern = .Platform$file.sep), n=1)` issued from the experiment at the CNRS Nouragues Research Station (French Guiana) has the following characteristics:
+
+* sampling frequency: `r fs_rec` Hz;
+* number of bits used for sampling: `r bit` bits;
+* duration: `r wav_dur_str`.
+
+```{r table-exp, include=TRUE, echo=FALSE, out.width = '100%', tab.cap='Start instants of measurement sequences at different distances.', tab.id='table-exp'}
+auto_set_format <- function() {
+  if (knitr::is_latex_output()) {
+    options(knitr.table.format = "latex")
+  } else {
+    options(knitr.table.format = "html")
+  }
+}
+auto_set_format()
+tbl_exp <- knitr::kable(df_timeline, col.names = paste(str_replace_all(string = colnames(df_timeline), pattern = "timeline", replacement = "start of sequence "), c("(m)", "(s)", "(s)", "(s)"), sep = " "), 
+                        booktabs = TRUE, longtable = FALSE, escape = FALSE, 
+                        align = "rccc", 
+                        caption = 'Start instants of measurement sequences at different distances.') %>% 
+  kable_styling(full_width = TRUE, position = "center")
+tbl_exp
+```
+
+# Signal processing methodology
+
+``` {r filter-design, include=FALSE, echo=FALSE}
+# Bandpass filter specifications
+filt_order <- 2  # order
+f_pass_min <- 10
+f_pass_max <- 1500
+filt_fpass <- c(f_pass_min, f_pass_max)
+Wpass <- filt_order / fs_rec * filt_fpass
+# Bandpass filter design
+bw <- butter(n = 2, w = Wpass, type = "pass",  plane = "z", output = "Arma")
+bw_freq_resp <- freqz(bw, fs = fs_rec)
+names(bw_freq_resp) <- str_replace(string = names(bw_freq_resp), pattern = "w", replacement = "f")
+```
+
+Since TLM simulation results will consist of sound pressure signals at each receiver for a given noise source type and valid until the frequency *f*~max~ set to `r f_pass_max` Hz, the signal processing methodology applied to the experimental signals consists in extracting the audio samples corresponding to each measurement configuration, namely:
+
+* for each sequence (*seq*) from 1 to `r nb_seqs`,
+* for each source-receiver distance from `r paste(df_timeline$distance[c(1, nrow(df_timeline))], "m", sep = " ", collapse = " to ")`,
+* for each noise type (`r (paste(gsub(".", " ", noise_types, fixed = TRUE), collapse = ", "))`).
+
+Then, a Butterworth passband filter of order `r filt_order` is designed for the bandwidth [`r paste(filt_fpass, "Hz", sep = " ", collapse = "; ")`] and convolved with each experimental raw signal sample to remove frequencies not modelled by the TLM model.
+
+``` {r filter-test-init, include=FALSE, echo=FALSE, fig.cap = "Illustration of the passband filtering applied to a generated white noise signal.", out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+# Generate white noise
+len_sig_test <- 5000  # Length of signal
+wn_gen_filename <- paste0("./output/", "generated_white_noise.wav")  # Name of the generated audio file for the test noise
+wn_filtered_filename <- str_replace(string = wn_gen_filename, pattern = "generated", replacement = "filtered")
+# Time axis
+axe_t <- seq(0, len_sig_test-1) / fs_rec
+# Time signal
+time_raw_wav <- gen_white_noise(sig_len = len_sig_test, f_samp = fs_rec, out_wav_filename = wn_gen_filename)
+time_raw_sig <- time_raw_wav@left / 2^(time_raw_wav@bit-1)
+time_raw_sig <- time_raw_sig / max(c(min(time_raw_sig), max(time_raw_sig))) # Normalize signal between -1 and 1
+# Bandpass filtering
+time_filtered_sig <- filtfilt(filt = bw, x = time_raw_sig)
+time_filtered_wav <- savewav(wave = bwfilter(wave = time_raw_wav, f = fs_rec, channel = 1, n = filt_order, bandpass = TRUE, from = filt_fpass[1], to = filt_fpass[2], listen = FALSE, output = "matrix"), f = fs_rec, channel = 1, filename = paste0("./output/", "filtered_white_noise.wav"))
+# Dataframe of time signals
+time_sigs_df <- data.frame(axe_t, time_raw_sig, time_filtered_sig)
+# Dataframe of spectra
+axe_f = fs_rec * seq(0, (length(time_raw_sig)/2)) / length(time_raw_sig)
+fft_raw_sig <- fft(time_raw_sig) / length(time_raw_sig)
+freq_raw_sig2 <- abs(fft_raw_sig/ length(time_raw_sig))  # two-sided spectrum
+freq_raw_sig <- freq_raw_sig2[seq(1, length(time_raw_sig)/2 + 1)]  # single-sided spectrum
+fft_filtered_sig <- fft(time_filtered_sig) / length(time_filtered_sig)
+freq_filtered_sig2 <- abs(fft_filtered_sig/ length(time_filtered_sig))  # two-sided spectrum
+freq_filtered_sig <- freq_filtered_sig2[seq(1, length(time_filtered_sig)/2 + 1)]  # single-sided spectrum
+freq_sigs_df <- data.frame(axe_f, freq_raw_sig, freq_filtered_sig)
+```
+
+The figure \@ref(fig:filter-test-plot) illustrates the signal processing methodology for a white noise of `r paste(round(x = len_sig_test / fs_rec, digits = 1), "s", sep = " ")` generated thanks to the *noisew* function of the *seewave* R library.
+
+``` {r filter-test-plot, include=TRUE, echo=FALSE, fig.cap = paste0("Illustration of the passband filtering applied to a generated white noise signal of ", round(x = len_sig_test / fs_rec, digits = 1), " s sampled at ", fs_rec, " Hz: (top) raw white noise and (bottom) passband filtered white noise."), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+# Plot raw time signal
+t_plt_raw <- ggplot(data = time_sigs_df, aes(x = axe_t, y = time_raw_sig)) +
+  geom_line(aes(y = time_raw_sig, colour = "Raw signal", group = 1,
+                text = paste("<b><br>Time: </br>", sprintf("%0.5f", axe_t), " s</b>",
+                             "<b><br>Sound pressure: </br>", sprintf('%.2e', time_raw_sig), " Pa</b>")),
+            colour = "red") +
+    labs(x = "Time (s)", y = "Sound pressure (Pa)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plot bandpass filtered time signal
+t_plt_filt <- ggplot(data = time_sigs_df, aes(x = axe_t, y = time_filtered_sig)) +
+    geom_line(aes(y = time_raw_sig, colour = "Clean signal", group = 1,
+                  text = paste("<b><br>Time: </br>", sprintf("%0.5f", axe_t), " s</b>",
+                               "<b><br>Sound pressure: </br>", sprintf('%.2e', time_filtered_sig), " Pa</b>")),
+            colour = "blue") +
+  labs(x = "Time (s)", y = "Sound pressure (Pa)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plot spectrum of the raw time signal
+f_plt_raw <- ggplot(data = freq_sigs_df, aes(x = axe_f, y = freq_raw_sig)) +
+    geom_line(aes(y = freq_raw_sig, colour = " signal", group = 1,
+                  text = paste("<b><br>Frequency: </br>", sprintf("%0.5f", axe_f), " Hz</b>",
+                               "<b><br>|Y(f)|: </br>", sprintf('%.2e', freq_raw_sig), "</b>")),
+            colour = "red") +
+    labs(x = "Frequency (Hz)", y = "|Y(f)|") + 
+  ggtitle(" ")
+
+## Plot spectrum of the filtered time signal
+# f_plt_filt <- ggplot(data = freq_sigs_df, aes(x = axe_f, y = freq_filtered_sig)) +
+#     geom_line(aes(y = freq_filtered_sig, colour = "Clean signal", group = 1,
+#                   text = paste("<b><br>Frequency: </br>", sprintf("%0.5f", axe_f), " Hz</b>",
+#                                "<b><br>|Y(f)|: </br>", sprintf('%.2e', freq_filtered_sig), "</b>")),
+#             colour = "blue") +
+#     labs(x = "Frequency (Hz)", y = "|Y(f)|")
+
+max_length <- max(c(length(freq_sigs_df$axe_f), length(bw_freq_resp$f)))
+freq_sigs_df2 <- data.frame(axe_f_sig = c(freq_sigs_df$axe_f, rep(NA, max_length - length(freq_sigs_df$axe_f))), 
+                 freq_filtered_sig = c(freq_sigs_df$freq_filtered_sig, rep(NA, max_length - length(freq_sigs_df$freq_filtered_sig))), 
+                 axe_f_bw = c(bw_freq_resp$f, rep(NA, max_length - length(bw_freq_resp$f))), 
+                 mag_bw = c(abs(bw_freq_resp$h), rep(NA, max_length - length(bw_freq_resp$h))))
+                 # mag_bw = c(20 * log10(abs(bw_freq_resp$h)), rep(NA, max_length - length(bw_freq_resp$f))))
+
+scale <- max(is.finite(freq_sigs_df2$mag_bw), na.rm = TRUE) / max(abs(freq_sigs_df2$freq_filtered_sig), na.rm = TRUE)
+
+# Plot spectrum of the filtered time signal and of the bandpass filter
+f_plt_filt <- ggplot(data = freq_sigs_df2, aes(x = axe_f_sig)) +
+  geom_line(aes(x = axe_f_sig, y = freq_filtered_sig, colour = "Filtered signal", group = 1, 
+                text = paste("<b><br>Frequency: </br>", sprintf("%0.5f", axe_f_sig), " Hz</b>",
+                             "<b><br>|Y(f)|: </br>", sprintf('%.2e', freq_filtered_sig), "</b>")), 
+            colour = "blue") +
+  geom_line(aes(x = axe_f_bw, y = mag_bw / scale, colour = "Butterworth filter", group = 1, 
+                text = paste("<b><br>Frequency: </br>", sprintf("%0.5f", axe_f_bw), " Hz</b>",
+                             "<b><br>|Y(f)|: </br>", sprintf('%.2e', mag_bw), "</b>")), 
+            colour = "green") + 
+  geom_vline(geom="label", xintercept = filt_fpass, linetype="dashed", color = "violet", linewidth = 1) +
+  annotate(geom = "text", x = filt_fpass, y = -Inf, label = filt_fpass, size = 3, color = "violet", lineheight = .1, hjust = .05, vjust = .5, angle = 90) + 
+  coord_cartesian(clip = "off") + 
+  scale_y_continuous(name = "|Y(f)|",  # Features of the first axis
+                     limits = c(min(freq_filtered_sig), max(freq_filtered_sig)), 
+                     sec.axis = sec_axis(~.*scale, name="Magnitude (dB)")) +  # Features of the second axis
+  labs(x = "Frequency (Hz)")
+
+# Remove legends
+t_plt_raw <- t_plt_raw + theme(legend.position="none")
+t_plt_filt <- t_plt_filt + theme(legend.position="none")
+f_plt_raw <- f_plt_raw + theme(legend.position="none")
+f_plt_filt <- f_plt_filt + theme(legend.position="none")
+
+# Create of a list with the plots
+sigs_plts <- list(t_plt_raw, t_plt_filt, f_plt_raw, f_plt_filt)
+
+# Create row and column titles
+col.titles = c("Time signal", "Spectrum")
+row.titles = c("Raw signal", "Filtered signal")
+
+sigs_plts[1:2] = lapply(1:2, function(i) arrangeGrob(sigs_plts[[i]], left=row.titles[i]))
+
+# grid.arrange(t_plt_raw, f_plt_raw, t_plt_filt, f_plt_filt, nrow=2, ncol=2)
+grid.arrange(grobs=lapply(c(1,3), function(i) {
+  arrangeGrob(grobs=sigs_plts[i:(i+1)], top=col.titles[i/2 + 1], ncol=1)
+}), ncol=2)
+```
+
+
+```{r init-audio-player, include=FALSE, echo=FALSE}
+audio_path  <- "./output"
+audio_files <- list.files(audio_path, 
+                          pattern = "\\.wav$",
+                          recursive = FALSE,
+                          all.files = FALSE,
+                          full.names = TRUE)
+```
+
+::: {}
+::: {.column width="10%"}
+:::
+::: {.column width="40%"}
+```{r play-generated-white-noise, include=TRUE, echo=FALSE}
+player_audio(wav_filename = audio_files[str_detect(string = audio_files, pattern = "generated")], player_title = "Play generated white noise signal.")
+```
+:::
+::: {.column width="5%"}
+:::
+::: {.column width="40%"}
+```{r play-filtered-white-noise, include=TRUE, echo=FALSE}
+player_audio(wav_filename = audio_files[str_detect(string = audio_files, pattern = "filtered")], player_title = "Play filtered white noise signal.")
+```
+:::
+::: {.column width="5%"}
+:::
+:::
+
+
+```{r child = "Background_noise.Rmd"}
+```
+
+
+```{r child = "White_noise.Rmd"}
+```
+
+
+```{r child = "Chirps.Rmd"}
+```
+
+
+# References {-}
+
+<div id="refs"></div>
+
+
+
+
+<!-- ```{r extract-sound, include=TRUE, echo=FALSE} -->
+<!-- time_axis <- seq(from = t.beg.wn, length.out = nrow(wav_wn_samples_channel), by = 1/fs_rec) -->
+<!-- for (id_seq in seq(1, nb_seqs)){ -->
+<!--   for (irow in seq(1, nrow(df_timeline))){ -->
+<!--     time.beg = timeline[irow] -->
+<!--     time.end = timeline[irow] + total_dur -->
+<!--     wav_channel = wav_ch_samples_channel -->
+
+<!--     # Create time axis -->
+<!--     time_axis <- seq(from = t.beg.wn, length.out = length(wav_channel), by = 1) /wavSM4@samp.rate -->
+
+<!--     # bf <- butter(n = 2, W = 1/100, type="low") -->
+<!--     # wav_channel_filt <- filtfilt(bf, wav_channel) -->
+<!--     # Design the filter -->
+<!--     h <- fir1(40, 30/ (wavSM4@samp.rate / 2), "low") -->
+<!--     # Filter signal -->
+<!--     wav_channel_filt <- filter(h, wav_channel) -->
+
+<!--     # Group time axis, raw signal and filtered signal in a dataframe -->
+<!--     wav_df <- data.frame(time_axis, wav_channel, wav_channel_filt) -->
+
+<!--     if (isFALSE(exists('df_samples'))){ -->
+<!--       df_samples <- list(wav_df) -->
+<!--     } else { -->
+<!--       df_samples <- c(df_samples, list(wav_df)) -->
+<!--     } -->
+<!--   } -->
+
+<!--   # bkg.wav  = extractNoise(wav_filename, channel=CHANNEL, timeline=timeline, total_dur=total_dur, t0=start_ref*2, dur=silbetween22s_dur-start_ref) -->
+<!--   # -->
+<!--   # time_axis <- seq(from = 0, to = length(bkg.wav)-1, by = 1) / fs_rec -->
+<!--   # wav_df <- data.frame(time_axis, bkg.wav) -->
+<!--   # # sig_plot <- plot_ly(wav_df) %>% -->
+<!--   # #   add_trace(x = ~time_axis, y = ~bkg.wav, color = ~as.factor(bkg.wav), type = 'scatter', mode = 'lines') %>% -->
+<!--   # #   layout(xaxis = list(title = "Time (s)", titlefont = "Courier New, monospace"), -->
+<!--   # #          yaxis = list(title = "Amplitude", titlefont = "Courier New, monospace"), -->
+<!--   # #          showlegend = FALSE) -->
+<!--   # sig_plot <- wav_df %>% -->
+<!--   #   ggplot(aes(x = ~time_axis, y = ~bkg.wav)) + -->
+<!--   #   # geom_area(fill="#69b3a2", alpha=0.5) + -->
+<!--   #   geom_line(color="#69b3a2") + -->
+<!--   #   ylab("Amplitude") + -->
+<!--   #   xlab("Time (s)") + -->
+<!--   #   theme_ipsum() -->
+<!--   # -->
+<!--   # # Turn it interactive with ggplotly -->
+<!--   # sig_plot <- ggplotly(sig_plot) -->
+<!--   # sig_plot -->
+<!--   # saveWidget(sig_plot, file = "./figures/wav_sig.html", selfcontained = FALSE, libdir = "lib") -->
+
+
+<!-- # Plots -->
+<!-- # wav_plots <- lapply(seq(1, nb_plots), function(ids) knitr::knit_expand(file = "wav_sample_df_plot.Rmd")) -->
+<!-- # spectro_plots <- lapply(seq(1, nb_plots), function(ids) knitr::knit_expand(file = "wav_sample_spectro_plot.Rmd")) -->
+<!-- ``` -->

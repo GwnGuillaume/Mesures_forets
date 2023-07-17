@@ -1,0 +1,18 @@
+# Chirps
+
+```{r extract-chirp-noise, include=TRUE, echo=FALSE}
+noise_type <- "chirp"
+t.beg = t.beg.ch
+t.end = t.end.ch
+wav_ch_samples <- extract_wav_samples_for_all_seqs(filename = wav_filename, timeline = df_timeline, t.beg = t.beg, t.end = t.end, noise_type = noise_type)
+wav_samples <- wav_ch_samples
+wav_ch_samples_channel <- extract_wav_samples_channel_for_all_seqs(wav_samples = wav_ch_samples, timeline = df_timeline, fs_rec = fs_rec, t.beg = t.beg, t.end = t.end)
+# Save the left audio channel samples for the 3 sequences and all distances in a npy file
+ch_samples_matrix <- data.matrix(wav_ch_samples_channel, rownames.force = NA)
+reticulate::r_to_py(ch_samples_matrix)$dump(paste0("./output/df_samples/", noise_type, "/", noise_type, ".npy"))
+df_samples <- wav_ch_samples_channel
+wav_ch_plots <- lapply(seq(2, ncol(df_samples)), 
+                       function(ids) knitr::knit_expand(file = "wav_sample_plots.Rmd"))
+```
+
+`r knit(text = unlist(wav_ch_plots))`

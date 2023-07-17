@@ -1,0 +1,127 @@
+```{r get-seq-infos-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids-1}}, echo=FALSE, include=FALSE}
+seq_dist_colname <- colnames(df_samples)[[{{ids}}]]
+parts <- str_split(string = seq_dist_colname, pattern = "_")[[1]]
+seq_name <- parts[1]
+seq_id <- str_remove(string = seq_name, pattern = "seq")
+dist_name <- parts[2]
+noise_name <- str_replace(string = noise_type, pattern = "_", replacement = " ")
+```
+
+`r if(dist_name == "0.5m") {paste0("## Sequence ", seq_id)}`
+
+`r paste0("### Distance: ", dist_name)`
+
+::: {}
+::: {.column width="48%"}
+
+```{r df-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-plot-{{ids-1}}, echo=FALSE, include=TRUE, fig.cap = paste0('Raw ', noise_name, ' - time sequence ', seq_id, ' at ', str_replace(string = dist_name, pattern = "m", replacement = " m"), ' from the source.'), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+png_filename <- paste0("sample_time_signal_", seq_name, "_", dist_name, ".png")
+png_file <- paste(".", "figures", png_filename, sep="/")
+
+calc_leq <- function(p, pref = 2e-5){
+  return(10 * log10( (1/length(p)) * sum( p**2/pref**2 )))
+}
+
+df_downsampled <- onlineforecast::resample(object = df_samples[c("time_axis", seq_dist_colname)], ts = 0.001, timename = "time_axis", fun = calc_leq, quantizetime = TRUE)
+
+if(isFALSE(file.exists(png_file))){
+  time_sig_plt <- suppressWarnings(plot_wav_sample_df(df_sample = df_downsampled, plot_name = "Raw signal"))
+  suppressMessages(ggsave(filename = png_file, 
+                          plot = time_sig_plt, 
+                          dpi = 300))
+  time_sig_plt
+} else {
+  knitr::include_graphics(png_file)
+}
+```
+
+:::
+::: {.column width="2%"}
+:::
+::: {.column width="48%"}
+
+```{r wav-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-seq-{{ids-1}}, echo=FALSE, include=TRUE, fig.cap = paste0('Raw ', noise_name, ' - spectrogram of sequence ', seq_id, ' at ', str_replace(string = dist_name, pattern = "m", replacement = " m"), ' from the source.'), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+
+png_file <- str_replace(string = png_file, pattern = "time_signal", replacement = "spectrogram")
+
+if(isFALSE(file.exists(png_file))){
+  step <- trunc(5/1000*wav_samples[[{{ids-1}}]]@samp.rate)     # one spectral slice every 5 ms
+  window <- trunc(40/1000*wav_samples[[{{ids-1}}]]@samp.rate)  # 40 ms data window
+  fftn <- 2^ceiling(log2(abs(window)))       # next highest power of 2
+  spectro(data = wav_samples[[{{ids-1}}]], nfft = fftn, window = window, overlap = window - step, t0 = t.beg, plot_spec = TRUE, normalize = TRUE)
+} else {
+  knitr::include_graphics(png_file)
+}
+```
+
+:::
+:::
+
+<div style="text-align: center;">
+```{r embed-audio-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids}}, echo=FALSE, include = TRUE}
+wav_trackname <- paste0("./output/wav_samples/", noise_type, "/", noise_type, "_seq_", seq_id, "_dist_", dist_name, ".wav")
+audio_title <- paste0("Play ", noise_name, " audio sequence ", str_remove(string = seq_name, pattern = "seq"), " at ", str_replace(string = dist_name, pattern = "m", replacement = " m"), " (file <i>", basename(wav_trackname), "</i>).")
+player_audio(wav_filename = wav_trackname, player_title = audio_title)
+# embed_audio(src = wav_trackname, type = "wav", placeholder = audio_title, attribute = c("controls"))
+```
+</div>
+
+::: {}
+::: {.column width="48%"}
+
+```{r df-filtered-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-plot-{{ids-1}}, echo=FALSE, include=TRUE, fig.cap = paste0("Filtered ", noise_name, ' - time sequence ', seq_id, ' at ', str_replace(string = dist_name, pattern = "m", replacement = " m"), ' from the source.'), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+wav_filtered_trackname <- str_replace(string = wav_trackname, pattern = "m.wav", replacement = "m_filtered.wav")
+# Bandpass filtering
+time_filtered_sig <- filtfilt(filt = bw, x = df_samples[, seq_dist_colname])
+time_filtered_wav <- savewav(wave = bwfilter(wave = wav_samples[[{{ids-1}}]], f = fs_rec, channel = 1, n = filt_order, bandpass = TRUE, from = filt_fpass[1], to = filt_fpass[2], listen = FALSE, output = "matrix"), f = fs_rec, channel = 1, filename = wav_filtered_trackname)
+
+# Dataframe of time signals
+time_axis <- seq(0, length(time_filtered_sig)-1) / fs_rec
+time_filtered_sig_df <- data.frame(time_axis, time_filtered_sig)
+
+df_filtered_downsampled <- onlineforecast::resample(object = time_filtered_sig_df, ts = 0.001, timename = "time_axis", fun = calc_leq, quantizetime = TRUE)
+
+png_file <- str_replace(string = png_file, pattern = "spectrogram", replacement = "filtered_time_signal")
+if(isFALSE(file.exists(png_file))){
+  time_sig_plt <- suppressWarnings(plot_wav_sample_df(df_sample = df_filtered_downsampled, plot_name = "Bandpass filtered signal"))
+  suppressMessages(ggsave(filename = png_file, 
+                          plot = time_sig_plt, 
+                          dpi = 300))
+  time_sig_plt
+} else {
+  knitr::include_graphics(png_file)
+}
+```
+
+:::
+::: {.column width="2%"}
+:::
+::: {.column width="48%"}
+
+```{r wav-sample-filtered-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-seq-{{ids-1}}, echo=FALSE, include=TRUE, fig.cap = paste0(noise_name, ' - spectrogram of sequence ', seq_id, ' at ', str_replace(string = dist_name, pattern = "m", replacement = " m"), ' from the source.'), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+
+png_file <- str_replace(string = png_file, pattern = "time_signal", replacement = "spectrogram")
+
+filtered_wav_sample <- readWave(wav_filtered_trackname, units = 'seconds')  # Read the wave file
+
+if(isFALSE(file.exists(png_file))){
+  step <- trunc(5/1000*filtered_wav_sample@samp.rate)     # one spectral slice every 5 ms
+  window <- trunc(40/1000*filtered_wav_sample@samp.rate)  # 40 ms data window
+  fftn <- 2^ceiling(log2(abs(window)))       # next highest power of 2
+  spectro(data = filtered_wav_sample, nfft = fftn, window = window, overlap = window - step, t0 = t.beg, plot_spec = TRUE, normalize = TRUE)
+} else {
+  knitr::include_graphics(png_file)
+}
+```
+
+:::
+:::
+
+<div style="text-align: center;">
+```{r embed-filtered-audio-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids}}, echo=FALSE, include = TRUE}
+audio_title <- str_replace(string = audio_title, pattern = "Play", replacement = "Play filtered")
+audio_title <- str_replace(string = audio_title, pattern = basename(wav_trackname), replacement = basename(wav_filtered_trackname))
+player_audio(wav_filename = wav_filtered_trackname, player_title = audio_title)
+# embed_audio(src = wav_filtered_trackname, type = "wav", placeholder = audio_title, attribute = c("controls"))
+```
+</div>

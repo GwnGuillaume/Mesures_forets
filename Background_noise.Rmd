@@ -1,0 +1,17 @@
+# Background noise
+
+```{r extract-background-noise, include=TRUE, echo=FALSE}
+noise_type <- "background_noise"
+t.beg = t.beg.bn
+t.end = t.end.bn
+wav_bn_samples <- extract_wav_samples_for_all_seqs(filename = wav_filename, timeline = df_timeline, t.beg = t.beg, t.end = t.end, noise_type = noise_type)
+wav_samples <- wav_bn_samples
+wav_bn_samples_channel <- extract_wav_samples_channel_for_all_seqs(wav_samples = wav_bn_samples, timeline = df_timeline, fs_rec = fs_rec, t.beg = t.beg, t.end = t.end)
+# Save the left audio channel samples for the 3 sequences and all distances in a npy file
+reticulate::r_to_py(data.matrix(wav_bn_samples_channel, rownames.force = NA))$dump(paste0("./output/df_samples/", noise_type, "/", noise_type, ".npy"))
+df_samples <- wav_bn_samples_channel
+wav_bn_plots <- lapply(seq(2, ncol(df_samples)), 
+                       function(ids) knitr::knit_expand(file = "wav_sample_plots.Rmd"))
+```
+
+`r knit(text = unlist(wav_bn_plots))`
