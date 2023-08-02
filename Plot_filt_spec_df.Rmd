@@ -1,0 +1,23 @@
+```{r wav-sample-filtered-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-seq-{{seq_rep_id}}, echo=FALSE, include=TRUE, fig.cap = paste0(noise_name, ' - spectrogram of sequence ', seq_id, ' at ', str_replace(string = dist_name, pattern = "m", replacement = " m"), ' from the source', ifelse(test=str_equal(noise_type, "chirp"), yes=paste0('(', which(seq_reps_id == {{seq_rep_id}}), '/', nb_reps, ').'), no='.')), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+root_name <- "spectrogram_filt_signal"
+wav_path <- paste0("./output/wav_samples/", noise_type, "/")
+if(str_equal(noise_type, "chirp")){
+  wav_filtered_trackname <- paste0(wav_path, "/", noise_type, "_", seq_name, "_dist_", dist_name, "_rep_", which(seq_reps_id == {{seq_rep_id}}), "_filtered.wav")
+  png_filename <- paste0(root_name, "_", seq_name, "_", dist_name, "_", "rep", rep_id, ".png")
+} else {
+  wav_filtered_trackname <- paste0(wav_path, "/", noise_type, "_", seq_name, "_dist_", dist_name, "_filtered.wav")
+  png_filename <- paste0(root_name, "_", seq_name, "_", dist_name, ".png")
+}
+png_file <- paste(".", "figures", png_filename, sep="/")
+
+filtered_wav_sample <- readWave(wav_filtered_trackname, units = 'seconds')  # Read the wave file
+
+if(isFALSE(file.exists(png_file))){
+  step <- trunc(5/1000*filtered_wav_sample@samp.rate)     # one spectral slice every 5 ms
+  window <- trunc(40/1000*filtered_wav_sample@samp.rate)  # 40 ms data window
+  fftn <- 2^ceiling(log2(abs(window)))       # next highest power of 2
+  spectro(data = filtered_wav_sample, nfft = fftn, window = window, overlap = window - step, t0 = 0., plot_spec = TRUE, normalize = TRUE)  # t0 = t.beg
+} else {
+  knitr::include_graphics(png_file)
+}
+```

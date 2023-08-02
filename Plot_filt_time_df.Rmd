@@ -1,0 +1,33 @@
+```{r df-filtered-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-plot-{{seq_rep_id}}, echo=FALSE, include=TRUE, fig.cap = paste0("Filtered ", noise_name, ' - time sequence ', seq_id, ' at ', str_replace(string = dist_name, pattern = "m", replacement = " m"), ' from the source', ifelse(test=str_equal(noise_type, "chirp"), yes=paste0('(', which(seq_reps_id == {{seq_rep_id}}), '/', nb_reps, ').'), no='.')), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+root_name <- "sample_filtered_time_signal"
+wav_path <- paste0("./output/wav_samples/", noise_type)
+if(str_equal(noise_type, "chirp")){
+  wav_filtered_trackname <- paste0(wav_path, "/", noise_type, "_", seq_name, "_dist_", dist_name, "_rep_", which(seq_reps_id == {{seq_rep_id}}), "_filtered.wav")
+  png_filename <- paste0(root_name, "_", seq_name, "_", dist_name, "_", "rep", rep_id, ".png")
+} else {
+  wav_filtered_trackname <- paste0(wav_path, "/", noise_type, "_", seq_name, "_dist_", dist_name, "_filtered.wav")
+  png_filename <- paste0(root_name, "_", seq_name, "_", dist_name, ".png")
+}
+png_file <- paste(".", "figures", png_filename, sep="/")
+
+# Bandpass filtering
+bw <- butter(n = 2, w = Wpass, type = "pass",  plane = "z", output = "Arma")
+time_filtered_sig <- filtfilt(filt = bw, x = df_samples[, seq_dist_colname[rep_id]])
+time_filtered_wav <- savewav(wave = bwfilter(wave = wav_samples[[{{seq_rep_id}}]], f = fs_rec, channel = 1, n = filt_order, bandpass = TRUE, from = filt_fpass[1], to = filt_fpass[2], listen = FALSE, output = "matrix"), f = fs_rec, channel = 1, filename = wav_filtered_trackname)
+
+# Dataframe of time signals
+time_axis <- seq(0, length(time_filtered_sig)-1) / fs_rec
+time_filtered_sig_df <- data.frame(time_axis, time_filtered_sig)
+
+df_filtered_downsampled <- onlineforecast::resample(object = time_filtered_sig_df, ts = 0.001, timename = "time_axis", fun = calc_leq, quantizetime = TRUE)
+
+if(isFALSE(file.exists(png_file))){
+  time_sig_plt <- suppressWarnings(plot_wav_sample_df(df_sample = df_filtered_downsampled, plot_name = "Bandpass filtered signal"))
+  suppressMessages(ggsave(filename = png_file, 
+                          plot = time_sig_plt, 
+                          dpi = 300))
+  time_sig_plt
+} else {
+  knitr::include_graphics(png_file)
+}
+```

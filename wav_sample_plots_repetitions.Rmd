@@ -1,0 +1,142 @@
+```{r get-seq-infos-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids-1}}, echo=FALSE, include=FALSE}
+seq_dist_colname <- c(colnames(df_samples)[[{{ids}}]], 
+                      colnames(df_samples)[[{{ids+1}}]], 
+                      colnames(df_samples)[[{{ids+2}}]], 
+                      colnames(df_samples)[[{{ids+3}}]])
+parts <- str_split(string = seq_dist_colname[1], pattern = "_")[[1]]
+seq_name <- parts[1]
+seq_id <- str_remove(string = seq_name, pattern = "seq")
+dist_name <- parts[2]
+rep_name <- parts[3]
+rep_id <- as.integer(str_remove(string = rep_name, pattern = "rep"))
+noise_name <- str_replace(string = noise_type, pattern = "_", replacement = " ")
+nb_reps <- length(t.beg)
+```
+
+`r if(dist_name == "0.5m") {paste0("## Sequence ", seq_id)}`
+
+`r paste0("### Distance: ", dist_name)`
+
+::: {}
+::: {.column width="48%"}
+```{r raw-time-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-plots-{{ids-1}}, include=TRUE, echo=FALSE}
+seq_reps_id <- seq({{ids}}-1, {{ids}}+2)
+raw_time_plots <- lapply(seq_reps_id,
+                         function(seq_rep_id) knitr::knit_expand(file = "Plot_raw_time_df.Rmd"))
+```
+`r knit(text = unlist(raw_time_plots))`
+
+:::
+::: {.column width="2%"}
+:::
+::: {.column width="48%"}
+```{r raw-freq-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-plots-{{ids-1}}, include=TRUE, echo=FALSE}
+raw_freq_plots <- lapply(seq({{ids}}-1, {{ids}}+2), 
+                         function(seq_rep_id) knitr::knit_expand(file = "Plot_raw_spec_df.Rmd"))
+```
+`r knit(text = unlist(raw_freq_plots))`
+:::
+:::
+
+
+::: {}
+::: {.column width="48%"}
+```{r raw-audio-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids-1}}, include=TRUE, echo=FALSE}
+idr <- rep_id
+raw_audios <- lapply({{ids-1}}, function(seq_rep_id) knitr::knit_expand(file = "Audio_raw_sample.Rmd"))
+```
+`r knit(text = unlist(raw_audios))`
+
+:::
+::: {.column width="2%"}
+:::
+::: {.column width="48%"}
+```{r raw-audio-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids}}, include=TRUE, echo=FALSE}
+idr <- rep_id+1
+raw_audios <- lapply({{ids}}, function(seq_rep_id) knitr::knit_expand(file = "Audio_raw_sample.Rmd"))
+```
+`r knit(text = unlist(raw_audios))`
+:::
+:::
+
+::: {}
+::: {.column width="48%"}
+```{r raw-audio-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids+1}}, include=TRUE, echo=FALSE}
+idr <- rep_id+2
+raw_audios <- lapply({{ids+1}}, function(seq_rep_id) knitr::knit_expand(file = "Audio_raw_sample.Rmd"))
+```
+`r knit(text = unlist(raw_audios))`
+
+:::
+::: {.column width="2%"}
+:::
+::: {.column width="48%"}
+```{r raw-audio-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids+2}}, include=TRUE, echo=FALSE}
+idr <- rep_id+3
+raw_audios <- lapply({{ids+2}}, function(seq_rep_id) knitr::knit_expand(file = "Audio_raw_sample.Rmd"))
+```
+`r knit(text = unlist(raw_audios))`
+:::
+:::
+
+::: {}
+::: {.column width="48%"}
+```{r filt-time-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-plots-{{ids-1}}, include=TRUE, echo=FALSE}
+filt_time_plots <- lapply(seq({{ids}}-1, {{ids}}+2), 
+                         function(seq_rep_id) knitr::knit_expand(file = "Plot_filt_time_df.Rmd"))
+```
+`r knit(text = unlist(filt_time_plots))`
+
+:::
+::: {.column width="2%"}
+:::
+::: {.column width="48%"}
+```{r filt-freq-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-plots-{{ids-1}}, include=TRUE, echo=FALSE}
+filt_freq_plots <- lapply(seq({{ids}}-1, {{ids}}+2), 
+                         function(seq_rep_id) knitr::knit_expand(file = "Plot_filt_spec_df.Rmd"))
+```
+`r knit(text = unlist(filt_freq_plots))`
+:::
+:::
+
+
+::: {}
+::: {.column width="48%"}
+```{r filt-audio-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids-1}}, include=TRUE, echo=FALSE}
+idr <- rep_id
+raw_audios <- lapply({{ids-1}}, function(seq_rep_id) knitr::knit_expand(file = "Audio_filt_sample.Rmd"))
+```
+`r knit(text = unlist(raw_audios))`
+
+:::
+::: {.column width="2%"}
+:::
+::: {.column width="48%"}
+```{r filt-audio-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids}}, include=TRUE, echo=FALSE}
+idr <- rep_id+1
+raw_audios <- lapply({{ids}}, function(seq_rep_id) knitr::knit_expand(file = "Audio_filt_sample.Rmd"))
+```
+`r knit(text = unlist(raw_audios))`
+:::
+:::
+
+::: {}
+::: {.column width="48%"}
+```{r filt-audio-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids+1}}, include=TRUE, echo=FALSE}
+idr <- rep_id+2
+raw_audios <- lapply({{ids+1}}, function(seq_rep_id) knitr::knit_expand(file = "Audio_filt_sample.Rmd"))
+```
+`r knit(text = unlist(raw_audios))`
+
+:::
+::: {.column width="2%"}
+:::
+::: {.column width="48%"}
+```{r filt-audio-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{ids+2}}, include=TRUE, echo=FALSE}
+idr <- rep_id+3
+raw_audios <- lapply({{ids+2}}, function(seq_rep_id) knitr::knit_expand(file = "Audio_filt_sample.Rmd"))
+```
+`r knit(text = unlist(raw_audios))`
+:::
+:::
+

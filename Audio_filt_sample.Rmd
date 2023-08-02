@@ -1,0 +1,17 @@
+<div style="text-align: center;">
+```{r embed-filtered-audio-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-{{seq_rep_id+1}}, echo=FALSE, include = TRUE}
+wav_path <- paste0("./output/wav_samples/", noise_type)
+if(str_equal(noise_type, "chirp")){
+  wav_filtered_trackname <- paste0(wav_path, "/", noise_type, "_seq", seq_id, "_dist_", dist_name, "_rep_", idr, "_filtered.wav")
+  audio_title <- paste0("Play filtered ", noise_name, " audio sequence ", str_remove(string = seq_name, pattern = "seq"), " at ", str_replace(string = dist_name, pattern = "m", replacement = " m"), 
+                        " (", idr, "/", nb_reps, ", file <i>", basename(wav_trackname), "</i>).")
+} else {
+  wav_filtered_trackname <- paste0(wav_path, "/", noise_type, "_seq", seq_id, "_dist_", dist_name, "_filtered.wav")
+    audio_title <- paste0("Play filtered ", noise_name, " audio sequence ", str_remove(string = seq_name, pattern = "seq"), " at ", str_replace(string = dist_name, pattern = "m", replacement = " m"), 
+                        " (file <i>", basename(wav_trackname), "</i>).")
+}
+
+audio_title <- str_replace(string = audio_title, pattern = basename(wav_trackname), replacement = basename(wav_filtered_trackname))
+player_audio(wav_filename = wav_filtered_trackname, player_title = audio_title)
+```
+</div>

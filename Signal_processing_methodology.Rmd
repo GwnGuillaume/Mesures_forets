@@ -1,0 +1,159 @@
+# Signal processing methodology
+
+
+``` {r filter-design, include=FALSE, echo=FALSE}
+# Bandpass filter design
+bw <- butter(n = 2, w = Wpass, type = "pass",  plane = "z", output = "Arma")
+bw_freq_resp <- freqz(bw, fs = fs_rec)
+names(bw_freq_resp) <- str_replace(string = names(bw_freq_resp), pattern = "w", replacement = "f")
+```
+
+Since TLM simulation results will consist of sound pressure signals at each receiver for a given noise source type and valid until the frequency *f*~max~ set to `r f_pass_max` Hz, the signal processing methodology applied to the experimental signals consists in extracting the audio samples corresponding to each measurement configuration, namely:
+
+* for each sequence (*seq*) from 1 to `r nb_seqs`,
+* for each source-receiver distance from `r paste(df_timeline$distance[c(1, nrow(df_timeline))], "m", sep = " ", collapse = " to ")`,
+* for each noise type (`r (paste(gsub(".", " ", noise_types, fixed = TRUE), collapse = ", "))`).
+
+Then, a Butterworth passband filter of order `r filt_order` is designed for the bandwidth [`r paste(filt_fpass, "Hz", sep = " ", collapse = "; ")`] and convolved with each experimental raw signal sample to remove frequencies not modelled by the TLM model.
+
+``` {r filter-test-init, include=FALSE, echo=FALSE, fig.cap = "Illustration of the passband filtering applied to a generated white noise signal.", out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+# Generate white noise
+len_sig_test <- 5000  # Length of signal
+wn_gen_filename <- paste0("./output/", "generated_white_noise.wav")  # Name of the generated audio file for the test noise
+wn_filtered_filename <- str_replace(string = wn_gen_filename, pattern = "generated", replacement = "filtered")
+# Time axis
+axe_t <- seq(0, len_sig_test-1) / fs_rec
+# Time signal
+time_raw_wav <- gen_white_noise(sig_len = len_sig_test, f_samp = fs_rec, out_wav_filename = wn_gen_filename)
+time_raw_sig <- time_raw_wav@left / 2^(time_raw_wav@bit-1)
+time_raw_sig <- time_raw_sig / max(c(min(time_raw_sig), max(time_raw_sig))) # Normalize signal between -1 and 1
+# Bandpass filtering
+time_filtered_sig <- filtfilt(filt = bw, x = time_raw_sig)
+time_filtered_wav <- savewav(wave = bwfilter(wave = time_raw_wav, f = fs_rec, channel = 1, n = filt_order, bandpass = TRUE, from = filt_fpass[1], to = filt_fpass[2], listen = FALSE, output = "matrix"), f = fs_rec, channel = 1, filename = paste0("./output/", "filtered_white_noise.wav"))
+# Dataframe of time signals
+time_sigs_df <- data.frame(axe_t, time_raw_sig, time_filtered_sig)
+# Dataframe of spectra
+axe_f = fs_rec * seq(0, (length(time_raw_sig)/2)) / length(time_raw_sig)
+fft_raw_sig <- fft(time_raw_sig) / length(time_raw_sig)
+freq_raw_sig2 <- abs(fft_raw_sig/ length(time_raw_sig))  # two-sided spectrum
+freq_raw_sig <- freq_raw_sig2[seq(1, length(time_raw_sig)/2 + 1)]  # single-sided spectrum
+fft_filtered_sig <- fft(time_filtered_sig) / length(time_filtered_sig)
+freq_filtered_sig2 <- abs(fft_filtered_sig/ length(time_filtered_sig))  # two-sided spectrum
+freq_filtered_sig <- freq_filtered_sig2[seq(1, length(time_filtered_sig)/2 + 1)]  # single-sided spectrum
+freq_sigs_df <- data.frame(axe_f, freq_raw_sig, freq_filtered_sig)
+```
+
+The figure \@ref(fig:filter-test-plot) illustrates the signal processing methodology for a white noise of `r paste(round(x = len_sig_test / fs_rec, digits = 1), "s", sep = " ")` generated thanks to the *noisew* function of the *seewave* R library.
+
+``` {r filter-test-plot, include=TRUE, echo=FALSE, fig.cap = paste0("Illustration of the passband filtering applied to a generated white noise signal of ", round(x = len_sig_test / fs_rec, digits = 1), " s sampled at ", fs_rec, " Hz: (top) raw white noise and (bottom) passband filtered white noise."), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+# Plot raw time signal
+t_plt_raw <- ggplot(data = time_sigs_df, aes(x = axe_t, y = time_raw_sig)) +
+  geom_line(aes(y = time_raw_sig, colour = "Raw signal", group = 1,
+                text = paste("<b><br>Time: </br>", sprintf("%0.5f", axe_t), " s</b>",
+                             "<b><br>Sound pressure: </br>", sprintf('%.2e', time_raw_sig), " Pa</b>")),
+            colour = "red") +
+    labs(x = "Time (s)", y = "Sound pressure (Pa)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plot bandpass filtered time signal
+t_plt_filt <- ggplot(data = time_sigs_df, aes(x = axe_t, y = time_filtered_sig)) +
+    geom_line(aes(y = time_raw_sig, colour = "Clean signal", group = 1,
+                  text = paste("<b><br>Time: </br>", sprintf("%0.5f", axe_t), " s</b>",
+                               "<b><br>Sound pressure: </br>", sprintf('%.2e', time_filtered_sig), " Pa</b>")),
+            colour = "blue") +
+  labs(x = "Time (s)", y = "Sound pressure (Pa)") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Plot spectrum of the raw time signal
+f_plt_raw <- ggplot(data = freq_sigs_df, aes(x = axe_f, y = freq_raw_sig)) +
+    geom_line(aes(y = freq_raw_sig, colour = " signal", group = 1,
+                  text = paste("<b><br>Frequency: </br>", sprintf("%0.5f", axe_f), " Hz</b>",
+                               "<b><br>|Y(f)|: </br>", sprintf('%.2e', freq_raw_sig), "</b>")),
+            colour = "red") +
+    labs(x = "Frequency (Hz)", y = "|Y(f)|") + 
+  ggtitle(" ")
+
+## Plot spectrum of the filtered time signal
+# f_plt_filt <- ggplot(data = freq_sigs_df, aes(x = axe_f, y = freq_filtered_sig)) +
+#     geom_line(aes(y = freq_filtered_sig, colour = "Clean signal", group = 1,
+#                   text = paste("<b><br>Frequency: </br>", sprintf("%0.5f", axe_f), " Hz</b>",
+#                                "<b><br>|Y(f)|: </br>", sprintf('%.2e', freq_filtered_sig), "</b>")),
+#             colour = "blue") +
+#     labs(x = "Frequency (Hz)", y = "|Y(f)|")
+
+max_length <- max(c(length(freq_sigs_df$axe_f), length(bw_freq_resp$f)))
+freq_sigs_df2 <- data.frame(axe_f_sig = c(freq_sigs_df$axe_f, rep(NA, max_length - length(freq_sigs_df$axe_f))), 
+                 freq_filtered_sig = c(freq_sigs_df$freq_filtered_sig, rep(NA, max_length - length(freq_sigs_df$freq_filtered_sig))), 
+                 axe_f_bw = c(bw_freq_resp$f, rep(NA, max_length - length(bw_freq_resp$f))), 
+                 mag_bw = c(abs(bw_freq_resp$h), rep(NA, max_length - length(bw_freq_resp$h))))
+                 # mag_bw = c(20 * log10(abs(bw_freq_resp$h)), rep(NA, max_length - length(bw_freq_resp$f))))
+
+scale <- max(is.finite(freq_sigs_df2$mag_bw), na.rm = TRUE) / max(abs(freq_sigs_df2$freq_filtered_sig), na.rm = TRUE)
+
+# Plot spectrum of the filtered time signal and of the bandpass filter
+f_plt_filt <- ggplot(data = freq_sigs_df2, aes(x = axe_f_sig)) +
+  geom_line(aes(x = axe_f_sig, y = freq_filtered_sig, colour = "Filtered signal", group = 1, 
+                text = paste("<b><br>Frequency: </br>", sprintf("%0.5f", axe_f_sig), " Hz</b>",
+                             "<b><br>|Y(f)|: </br>", sprintf('%.2e', freq_filtered_sig), "</b>")), 
+            colour = "blue") +
+  geom_line(aes(x = axe_f_bw, y = mag_bw / scale, colour = "Butterworth filter", group = 1, 
+                text = paste("<b><br>Frequency: </br>", sprintf("%0.5f", axe_f_bw), " Hz</b>",
+                             "<b><br>|Y(f)|: </br>", sprintf('%.2e', mag_bw), "</b>")), 
+            colour = "green") + 
+  geom_vline(geom="label", xintercept = filt_fpass, linetype="dashed", color = "violet", linewidth = 1) +
+  annotate(geom = "text", x = filt_fpass, y = -Inf, label = filt_fpass, size = 3, color = "violet", lineheight = .1, hjust = .05, vjust = .5, angle = 90) + 
+  coord_cartesian(clip = "off") + 
+  scale_y_continuous(name = "|Y(f)|",  # Features of the first axis
+                     limits = c(min(freq_filtered_sig), max(freq_filtered_sig)), 
+                     sec.axis = sec_axis(~.*scale, name="Magnitude (dB)")) +  # Features of the second axis
+  labs(x = "Frequency (Hz)")
+
+# Remove legends
+t_plt_raw <- t_plt_raw + theme(legend.position="none")
+t_plt_filt <- t_plt_filt + theme(legend.position="none")
+f_plt_raw <- f_plt_raw + theme(legend.position="none")
+f_plt_filt <- f_plt_filt + theme(legend.position="none")
+
+# Create of a list with the plots
+sigs_plts <- list(t_plt_raw, t_plt_filt, f_plt_raw, f_plt_filt)
+
+# Create row and column titles
+col.titles = c("Time signal", "Spectrum")
+row.titles = c("Raw signal", "Filtered signal")
+
+sigs_plts[1:2] = lapply(1:2, function(i) arrangeGrob(sigs_plts[[i]], left=row.titles[i]))
+
+# grid.arrange(t_plt_raw, f_plt_raw, t_plt_filt, f_plt_filt, nrow=2, ncol=2)
+grid.arrange(grobs=lapply(c(1,3), function(i) {
+  arrangeGrob(grobs=sigs_plts[i:(i+1)], top=col.titles[i/2 + 1], ncol=1)
+}), ncol=2)
+```
+
+
+```{r init-audio-player, include=FALSE, echo=FALSE}
+audio_path  <- "./output"
+audio_files <- list.files(audio_path, 
+                          pattern = "\\.wav$",
+                          recursive = FALSE,
+                          all.files = FALSE,
+                          full.names = TRUE)
+```
+
+::: {}
+::: {.column width="10%"}
+:::
+::: {.column width="40%"}
+```{r play-generated-white-noise, include=TRUE, echo=FALSE}
+player_audio(wav_filename = audio_files[str_detect(string = audio_files, pattern = "generated")], player_title = "Play generated white noise signal.")
+```
+:::
+::: {.column width="5%"}
+:::
+::: {.column width="40%"}
+```{r play-filtered-white-noise, include=TRUE, echo=FALSE}
+player_audio(wav_filename = audio_files[str_detect(string = audio_files, pattern = "filtered")], player_title = "Play filtered white noise signal.")
+```
+:::
+::: {.column width="5%"}
+:::
+:::

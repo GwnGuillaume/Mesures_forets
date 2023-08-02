@@ -1,0 +1,21 @@
+```{r df-sample-{{str_replace(string = noise_type, pattern = "_", replacement = "-")}}-plot-{{seq_rep_id}}, echo=FALSE, include=TRUE, fig.cap = paste0('Raw ', noise_name, ' - time sequence ', seq_id, ' at ', str_replace(string = dist_name, pattern = "m", replacement = " m"), ' from the source', ifelse(test=str_equal(noise_type, "chirp"), yes=paste0('(', which(seq_reps_id == {{seq_rep_id}}), '/', nb_reps, ').'), no='.')), out.width = '100%', fig.align = 'center', results = 'asis', dev = 'png'}
+root_name <- "sample_raw_time_signal"
+if(str_equal(noise_type, "chirp")){
+  png_filename <- paste0(root_name, "_", seq_name, "_", dist_name, "_", "rep", which(seq_reps_id == {{seq_rep_id}}), ".png")
+} else {
+  png_filename <- paste0(root_name, "_", seq_name, "_", dist_name, ".png")
+}
+png_file <- paste(".", "figures", png_filename, sep="/")
+
+df_downsampled <- onlineforecast::resample(object = df_samples[, c("time_axis", seq_dist_colname[which(seq_reps_id == {{seq_rep_id}})])], ts = 0.001, timename = "time_axis", fun = calc_leq, quantizetime = TRUE)
+
+if(isFALSE(file.exists(png_file))){
+  time_sig_plt <- suppressWarnings(plot_wav_sample_df(df_sample = df_downsampled, plot_name = "Raw signal"))
+  suppressMessages(ggsave(filename = png_file, 
+                          plot = time_sig_plt, 
+                          dpi = 300))
+  time_sig_plt
+} else {
+  knitr::include_graphics(png_file)
+}
+```
